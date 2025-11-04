@@ -3,40 +3,41 @@ import os
 import logging
 import requests
 import boto3
+import uuid
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
 table_name = os.environ["TABLE_NAME"]
-sns_topic_arn = os.environ["SNS_TOPIC_ARN"]
+sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
+slack_webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(table_name)
 sns_client = boto3.client("sns")
-SLACK_WEBHOOK_URL = os.environ["SLACK_WEBHOOK_URL"]
-SNS_TOPIC_ARN = os.environ.get("SNS_TOPIC_ARN")
-logger.info("TABLE_NAME:", os.environ.get("TABLE_NAME"))
 
 
 def notify_slack_and_sns(message: str):
-    if SLACK_WEBHOOK_URL:
+    if slack_webhook_url:
         try:
             response = requests.post(
-                SLACK_WEBHOOK_URL,
+                slack_webhook_url,
                 json={"text": message},
                 headers={"Content-Type": "application/json"},
             )
             response.raise_for_status()
         except Exception as e:
-            logger.info("Erreur en envoyant sur Slack:", e)
+            logger.error(f"Erreur Slack: {e}")
 
-    if SNS_TOPIC_ARN:
+    if sns_topic_arn:
         try:
             sns_client.publish(
-                TopicArn=SNS_TOPIC_ARN,
+                TopicArn=sns_topic_arn,
                 Message=json.dumps({"default": message}),
                 MessageStructure="json",
             )
         except Exception as e:
-            logger.info("Erreur en envoyant sur SNS:", e)
+            logger.error(f"Erreur SNS: {e}")
 
 
 def handler(event, context):
@@ -44,26 +45,43 @@ def handler(event, context):
     http_method = event.get("httpMethod")
 
     if http_method == "GET":
-        # http_method récuêre le type de requete
-        response = table.scan()
-        # table.scan() recupère tous les livres
-        notify_slack_and_sns("Liste des livres consultée")
-        return {
-            "statusCode": 200,
-            "body": json.dumps(response["Items"]),
-            "headers": {"Content-Type": "application/json"},
-        }
-    elif http_method == "POST":
-        data = json.loads(event.get("body", "{}"))
-        logger.info(f"Event reçu: {event}")
-        if "id" not in data or "title" not in data or "author" not in data:
+        book_id = event.get("queryStringParameters", {}).get("id")
+        if book_id:
+            # Récupérer un livre spécifique
+            response = table.get_item(Key={"id": book_id})
+            item = response.get("Item")
+            if not item:
+                return {
+                    "statusCode": 404,
+                    "body": json.dumps({"message": "Livre non trouvé"}),
+                    "headers": {"Content-Type": "application/json"},
+                }
+            notify_slack_and_sns(f"Livre {book_id} consulté")
             return {
-                "statusCode": 400,
-                "body": json.dumps({"error": "id,title et author requis"}),
+                "statusCode": 200,
+                "body": json.dumps(item),
                 "headers": {"Content-Type": "application/json"},
             }
+        else:
+            # Récupérer tous les livres
+            response = table.scan()
+            notify_slack_and_sns("Liste des livres consultée")
+            return {
+                "statusCode": 200,
+                "body": json.dumps(response.get("Items", [])),
+                "headers": {"Content-Type": "application/json"},
+            }
+
+    elif http_method == "POST":
+        data = json.loads(event.get("body", "{}"))
+        if "title" not in data or "author" not in data:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "title et author requis"}),
+                "headers": {"Content-Type": "application/json"},
+            }
+        data["id"] = str(uuid.uuid4())
         table.put_item(Item=data)
-        # Toujours envoyer statuscode body et headers
         notify_slack_and_sns(
             f"Nouveau livre ajouté : {data['title']} par {data['author']}"
         )
@@ -74,11 +92,10 @@ def handler(event, context):
         }
     elif http_method == "DELETE":
         data = json.loads(event.get("body", "{}"))
-        logger.info(f"Event reçu: {event}")
         if "id" not in data:
             return {
                 "statusCode": 400,
-                "body": json.dumps({"error": "id  requit"}),
+                "body": json.dumps({"error": "id requis"}),
                 "headers": {"Content-Type": "application/json"},
             }
         table.delete_item(Key={"id": data["id"]})
@@ -91,6 +108,6 @@ def handler(event, context):
     else:
         return {
             "statusCode": 400,
-            "body": json.dumps({"error": "method not supported"}),
+            "body": json.dumps({"error": "méthode non supportée"}),
             "headers": {"Content-Type": "application/json"},
         }

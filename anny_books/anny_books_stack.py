@@ -56,7 +56,7 @@ class AnnyBooksStack(Stack):
         lambda_function = _lambda.Function(
             self,
             "AnnyBooksLambdaFunction",
-            function_name="AnnyBooksLambdaFunctionCorrection",
+            function_name="AnnyBooksLambdaFunctionCorrect",
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="annybooks_handler.handler",
             code=_lambda.Code.from_asset("lambda"),
@@ -94,7 +94,13 @@ class AnnyBooksStack(Stack):
                 allow_methods=apigateway.Cors.ALL_METHODS,
             ),
         )
-        anny_books_resource = api.root.add_resource("annybooks")
+        cors_options = apigateway.CorsOptions(
+            allow_origins=apigateway.Cors.ALL_ORIGINS,
+            allow_methods=apigateway.Cors.ALL_METHODS,
+        )
+        anny_books_resource = api.root.add_resource(
+            "annybooks", default_cors_preflight_options=cors_options
+        )
         anny_books_lambda_integration = apigateway.LambdaIntegration(lambda_function)
         anny_books_resource.add_method("GET", anny_books_lambda_integration)
         anny_books_resource.add_method("POST", anny_books_lambda_integration)
