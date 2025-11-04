@@ -30,11 +30,9 @@ jobs:
         run: sudo npm i -g aws-cdk
 
       - name: install deployment dependencies
-        working-directory: ./AnnyBooks
         run: pip3 install -r requirements.txt
 
       - name: cdk synth
-        working-directory: ./AnnyBooks
         run: cdk synth
 
       - name: cdk deploy
