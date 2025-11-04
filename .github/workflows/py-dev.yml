@@ -40,4 +40,10 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID}}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY}}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION}}
+        run: cdk diff
+
+      - name: force destroy
+        run: cdk destroy AnnyBooksStack --force
+
+      - name: deploy
         run: cdk deploy AnnyBooksStack --require-approval never
