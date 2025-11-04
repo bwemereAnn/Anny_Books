@@ -17,7 +17,7 @@ class AnnyBooksStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        self.table = _dynamodb.Table(
+        anny_books_table = _dynamodb.Table(
             self,
             "AnnyBooksTable",
             table_name="AnnyBooks",
@@ -26,7 +26,7 @@ class AnnyBooksStack(Stack):
             ),
             removal_policy=RemovalPolicy.DESTROY,
         )
-        read_capacity = self.table.metric_consumed_read_capacity_units()
+        read_capacity = anny_books_table.metric_consumed_read_capacity_units()
         cloudwatch.Alarm(
             self,
             "HighReadCapacity",
@@ -61,7 +61,7 @@ class AnnyBooksStack(Stack):
             handler="annybooks_handler.handler",
             code=_lambda.Code.from_asset("lambda"),
             environment={
-                "TABLE_NAME": self.table.table_name,
+                "TABLE_NAME": anny_books_table.table_name,
                 "SNS_TOPIC_ARN": alarm_topic.topic_arn,
                 "SLACK_WEBHOOK_URL": (
                     "https://hooks.slack.com/services/"
@@ -69,12 +69,11 @@ class AnnyBooksStack(Stack):
                 ),
             },
         )
-
         alarm_topic.add_subscription(
             _sns_subscriptions.LambdaSubscription(lambda_function)
         )
         alarm_topic.grant_publish(lambda_function)
-        self.table.grant_read_write_data(lambda_function)
+        anny_books_table.grant_read_write_data(lambda_function)
         error_metric = lambda_function.metric_errors()
         lambda_error_alarm = cloudwatch.Alarm(
             self,
@@ -95,9 +94,11 @@ class AnnyBooksStack(Stack):
                 allow_methods=apigateway.Cors.ALL_METHODS,
             ),
         )
-        CfnOutput(self, "TableName", value=self.table.table_name)
+        anny_books_resource = api.root.add_resource("annybooks")
+        anny_books_lambda_integration = apigateway.LambdaIntegration(lambda_function)
+        anny_books_resource.add_method("GET", anny_books_lambda_integration)
+        anny_books_resource.add_method("POST", anny_books_lambda_integration)
+        CfnOutput(self, "TableName", value=anny_books_table.table_name)
         CfnOutput(self, "TopicArn", value=alarm_topic.topic_arn)
         lambda_error_alarm.add_alarm_action(cloudwatch_actions.SnsAction(alarm_topic))
         CfnOutput(self, "ApiUrl", value=api.url)
-
-        # https://ve7nv5c1wa.execute-api.eu-north-1.amazonaws.com/prod/
