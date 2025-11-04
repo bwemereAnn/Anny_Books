@@ -1,0 +1,45 @@
+name: python cdk deploy
+
+on:
+  push:
+    branches: [ "main" ]
+
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [ 18.x, 20.x, 22.x ]
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install web app dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: build web app
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: install AWS CDK
+        run: sudo npm i -g aws-cdk
+
+      - name: install deployment dependencies
+        working-directory: ./AnnyBooks
+        run: pip3 install -r requirements.txt
+
+      - name: cdk synth
+        working-directory: ./AnnyBooks
+        run: cdk synth
+
+      - name: cdk deploy
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID}}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY}}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION}}
+        run: cdk deploy

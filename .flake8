@@ -1,0 +1,9 @@
+[flake8]
+exclude =
+    .github
+    .venv,
+    cdk.out,
+    frontend/,
+    __pycache__,
+max-line-length = 88
+extend-ignore = E203, W503
